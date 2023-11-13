@@ -17,17 +17,24 @@ app.post("/upload", upload.single("sample"), (req, res) => {
         return res.status(400).send("File is empty");
     }
 
+    const requiredHeaders = ["Student_Id", "First_Name", "Last_Name", "Email", "Upload_Date", "Title_Code", "Percentage"];
+
     const buffer = req.file.buffer;
 
     stream.Readable.from(buffer.toString("utf8"))
         .pipe(csvParser())
+        .on("headers", (headers) => {
+            for (let i = 0; i < headers.length; i++) {
+                if (headers[i] !== requiredHeaders[i]) {
+                    return res.status(400).send("Invalid CSV headers");
+                }
+            }
+        })
         .on("data", (data) => {
-            console.log(data);
         })
         .on("end", () => {
-            console.log("CSV file successfully processed");
+            res.send("File uploaded successfully");
         });
-    res.send("File uploaded successfully");
 })
 
 app.listen(PORT, () => {
