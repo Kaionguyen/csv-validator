@@ -17,6 +17,7 @@ let transporter = nodemailer.createTransport({
 });
 
 // Validate each row of the CSV file
+// 4d. Validate data for each row record is valid if not, display the offending error
 function validateRow(data, index) {
     if (Object.keys(data).length !== 7) {
         throw `Invalid number of columns at row ${index + 1}`;
@@ -89,8 +90,10 @@ function sendEmail (statusCode, message){
 
 // Handle POST request
 app.post("/upload", upload.single("sample"), (req, res) => {
+    // 4a. Validate input file is in correct file format
     if (!req.file || req.file.mimetype !== "text/csv") {
         return res.status(400).send("Please upload a CSV file");
+    // 4b. Validate uploaded data file is not empty/ blank
     } else if (req.file.size === 0) {
         return res.status(400).send("File is empty");
     }
@@ -104,7 +107,7 @@ app.post("/upload", upload.single("sample"), (req, res) => {
     stream.Readable.from(buffer)
         .pipe(csvParser())
         .on("headers", (headers) => {
-            // Compare parsed headers with required headers
+            // 4c. Validate correct header(column) file field names
             for (let i = 0; i < headers.length; i++) {
                 if (headers[i] !== requiredHeaders[i]) {
                     return res.status(400).send("Invalid CSV headers");
@@ -117,7 +120,7 @@ app.post("/upload", upload.single("sample"), (req, res) => {
                     return res.status(400).send(`Only ${N} rows are allowed`);
                 }
 
-                // Store cleaned data in an array
+                // 4d. Validate data for each row record is valid if not, display the offending error
                 cleanedData.push(validateRow(data, row));
 
                 row++;
@@ -126,13 +129,18 @@ app.post("/upload", upload.single("sample"), (req, res) => {
             }
         }).on("end", async () => {
             for (let i = 0; i < cleanedData.length; i++) {
+                // 5a. Authenticate to another the API enabled backend environment
                 try {
+                    // 5b. Send each processed row to the API using a POST request
                     await axios.post(URL, cleanedData[i]);
                 } catch (error) {
+                    // 6b. Send an error notification email to the system admin
+                    // 6c. Generate and send an error notification email to the system admin
                     sendEmail(error.response.status, `Error sending row ${i + 1}`);
                     return res.status(500).send(`Error sending row ${i + 1}`);
                 }
             }
+            // 6a. Verify success of each row sent to the API
             sendEmail(200, "All rows sent successfully");
             return res.status(200).send("File uploaded successfully");
         })
