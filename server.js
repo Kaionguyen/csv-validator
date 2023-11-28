@@ -116,6 +116,7 @@ app.post("/upload", upload.single("sample"), (req, res) => {
         })
         .on("data", (data) => {
             try {
+                // 4e. Validate only 10 rows are allowed
                 if (row >= N) {
                     return res.status(400).send(`Only ${N} rows are allowed`);
                 }
@@ -128,6 +129,10 @@ app.post("/upload", upload.single("sample"), (req, res) => {
                 return res.status(400).send(error);
             }
         }).on("end", async () => {
+            // 4b. Validate uploaded data file is not empty/ blank
+            if(row === 1) {
+                return res.status(400).send('File has no data');
+            }
             for (let i = 0; i < cleanedData.length; i++) {
                 // 5a. Authenticate to another the API enabled backend environment
                 try {
