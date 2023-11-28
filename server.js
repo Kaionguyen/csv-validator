@@ -1,20 +1,15 @@
+require("dotenv").config();
 const express = require("express");
 const stream = require("stream");
 const multer = require("multer");
 const csvParser = require("csv-parser");
+const nodemailer = require("nodemailer");
 const axios = require("axios");
 
 const app = express(express.json());
 const PORT = process.env.PORT || 3000;
 const URL = "https://httpbin.org/post";
 const upload = multer({ storage: multer.memoryStorage() });
-let transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-        user: process.env.EMAIL,
-        pass: process.env.PASSWORD,
-    }
-});
 
 // Validate each row of the CSV file
 // 4d. Validate data for each row record is valid if not, display the offending error
@@ -70,12 +65,44 @@ function validateRow(data, index) {
     return cleanData;
 }
 
-function sendEmail (statusCode, message){
-    const status = statusCode === 200 ? "Success" : "Partial Failure";
+function sendEmail (success, failure) {
+    const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+            user: process.env.EMAIL,
+            pass: process.env.EMAIL_PASSWORD
+        }
+    });
+
+    let message = '';
+
+    if (failure.length > 0) {
+        message += 'Partial Success\n\n';
+        
+        // Append successful rows
+        message += 'Successful Rows:\n';
+        success.forEach((row) => {
+            message += `${row}\n`;
+        });
+
+        // Append failed rows
+        message += '\nFailed Rows:\n';
+        failure.forEach((row) => {
+            message += `${row}\n`;
+        });
+    } else {
+        message += 'All rows succeeded in sending\n\n';
+
+        // Append all rows if no failures
+        success.forEach((row) => {
+            message += `${row}\n`;
+        });
+    }
+
     let mailOptions = {
         from: process.env.EMAIL,
         to: process.env.SYSTEM_ADMIN_EMAIL,
-        subject: `CSV Upload ${status}`,
+        subject: "Row Statuses",
         text: message
     };
 
@@ -133,20 +160,24 @@ app.post("/upload", upload.single("sample"), (req, res) => {
             if(row === 1) {
                 return res.status(400).send('File has no data');
             }
+
+            const success = [];
+            const failure = [];
+
             for (let i = 0; i < cleanedData.length; i++) {
                 // 5a. Authenticate to another the API enabled backend environment
                 try {
                     // 5b. Send each processed row to the API using a POST request
-                    await axios.post(URL, cleanedData[i]);
+                    const response = await axios.post(URL, cleanedData[i]);
+                    success.push(`Row ${i + 1}: sent successfully`);
                 } catch (error) {
                     // 6b. Send an error notification email to the system admin
                     // 6c. Generate and send an error notification email to the system admin
-                    sendEmail(error.response.status, `Error sending row ${i + 1}`);
-                    return res.status(500).send(`Error sending row ${i + 1}`);
+                    failure.push(`Row ${i + 1}: failed to send`);
                 }
             }
             // 6a. Verify success of each row sent to the API
-            sendEmail(200, "All rows sent successfully");
+            sendEmail(success, failure);
             return res.status(200).send("File uploaded successfully");
         })
 })
